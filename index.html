@@ -1117,15 +1117,22 @@ body{
   var rated    = false;                       // untouched must never count as a 1
   var shown    = 0;                           // last integer the readout displayed
   var snapRAF  = null;
+  var ratingValue = null;                     // the committed answer
 
   /* The track runs continuously so the slug glides under the finger,
-     but a rating is only ever a whole number: the readout rounds live
-     and the thumb settles onto the notch when you let go. */
+     but a rating is only ever a whole number.
+
+     The committed value is set the instant the person acts — it is NEVER
+     read back off the slider's position. The eased travel is decoration,
+     and decoration must not decide the data: requestAnimationFrame is
+     throttled in a background tab, so a value sampled mid-tween can be
+     any number between where it started and where it was going. */
   function value()  { return Number(slider.value); }
-  function rating() { return Math.min(10, Math.max(1, Math.round(value()))); }
+  function rating() { return ratingValue; }
+  function commit(v) { ratingValue = Math.min(10, Math.max(1, Math.round(v))); }
 
   function paintScale() {
-    var raw = value(), r = rating();
+    var raw = value(), r = rated ? rating() : null;
     slider.style.setProperty("--pct", rated ? ((raw - 1) / 9 * 100) + "%" : "0%");
     readout.textContent = rated ? String(r) : "—";
     readout.setAttribute("data-unset", rated ? "0" : "1");
@@ -1154,6 +1161,7 @@ body{
     if (snapRAF) cancelAnimationFrame(snapRAF);
     var from = value(), t0 = 0;
     to = Math.min(10, Math.max(1, to));
+    commit(to);                               // the answer lands now, not when the animation finishes
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || ms === 0) {
       slider.value = String(to); paintScale(); validate(); return;
     }
@@ -1174,6 +1182,7 @@ body{
   slider.addEventListener("input", function () {
     if (snapRAF) { cancelAnimationFrame(snapRAF); snapRAF = null; }
     markRated();
+    commit(value());                          // dragging commits as it goes
     paintScale();
     validate();
   });
@@ -1432,6 +1441,7 @@ body{
     if (snapRAF) { cancelAnimationFrame(snapRAF); snapRAF = null; }
     rated = false;
     shown = 0;
+    ratingValue = null;
     slider.value = "1";
     slider.classList.add("is-unset");
     readout.classList.remove("pop");
